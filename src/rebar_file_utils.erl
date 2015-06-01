@@ -120,13 +120,13 @@ mv(Source, Dest) ->
                                       [{use_stdout, false}, abort_on_error]),
             ok;
         {win32, _} ->
-            {ok, R} = rebar_utils:sh(
-                        ?FMT("move /y \"~s\" \"~s\" 1> nul",
+            Res = rebar_utils:sh(
+                        ?FMT("robocopy /move /e \"~s\" \"~s\" 1> nul",
                              [filename:nativename(Source),
                               filename:nativename(Dest)]),
                         [{use_stdout, false}, return_on_error]),
-            case R of
-                [] ->
+            case Res of
+                {error, {1, []}} ->
                     ok;
                 _ ->
                     {error, lists:flatten(
