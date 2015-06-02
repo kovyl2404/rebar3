@@ -158,11 +158,21 @@ sh(Command0, Options0) ->
     ?DEBUG("Port Cmd: ~s\nPort Opts: ~p\n", [Command, PortSettings]),
     Port = open_port({spawn, Command}, PortSettings),
 
-    case sh_loop(Port, OutputHandler, []) of
-        {ok, _Output} = Ok ->
-            Ok;
-        {error, {_Rc, _Output}=Err} ->
-            ErrorHandler(Command, Err)
+    case os:type() of
+        {win32, _} ->
+            case sh_loop_win32(Port, OutputHandler, []) of
+                {ok, _Output} = Ok ->
+                    Ok;
+                {error, {_Rc, _Output}=Err} ->
+                    ErrorHandler(Command, Err)
+            end;
+        {unix, _} ->
+            case sh_loop(Port, OutputHandler, []) of
+                {ok, _Output} = Ok ->
+                    Ok;
+                {error, {_Rc, _Output}=Err} ->
+                    ErrorHandler(Command, Err)
+            end
     end.
 
 find_files(Dir, Regex) ->
@@ -440,6 +450,19 @@ sh_loop(Port, Fun, Acc) ->
         {Port, {exit_status, Rc}} ->
             {error, {Rc, lists:flatten(lists:reverse(Acc))}}
     end.
+
+sh_loop_win32(Port, Fun, Acc) ->
+    receive
+        {Port, {data, {eol, Line}}} ->
+            sh_loop_win32(Port, Fun, Fun(Line ++ "\n", Acc));
+        {Port, {data, {noeol, Line}}} ->
+            sh_loop_win32(Port, Fun, Fun(Line, Acc));
+        {Port, {exit_status, Rc}} when Rc < 9; Rc =:= 16 ->
+            {ok, lists:flatten(lists:reverse(Acc))};
+        {Port, {exit_status, Rc}} ->
+            {error, {Rc, lists:flatten(lists:reverse(Acc))}}
+    end.
+
 
 beam_to_mod(Dir, Filename) ->
     [Dir | Rest] = filename:split(Filename),
