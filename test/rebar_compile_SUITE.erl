@@ -167,7 +167,7 @@ recompile_when_hrl_changes(Config) ->
 
     timer:sleep(1000),
 
-    os:cmd("touch " ++ HeaderFile),
+    rebar_file_utils:touch(HeaderFile),
 
     rebar_test_utils:run_and_check(Config, [], ["compile"], {ok, [{app, Name}]}),
 
@@ -276,9 +276,8 @@ delete_beam_if_source_deleted(Config) ->
     rebar_test_utils:run_and_check(Config, [], ["compile"], {ok, [{app, Name}]}),
 
     EbinDir = filename:join([AppDir, "_build", "default", "lib", Name, "ebin"]),
-    SrcDir = filename:join([AppDir, "_build", "default", "lib", Name, "src"]),
     ?assert(filelib:is_regular(filename:join(EbinDir, "not_a_real_src_" ++ Name ++ ".beam"))),
-    file:delete(filename:join(SrcDir, "not_a_real_src_" ++ Name ++ ".erl")),
+    file:delete(filename:join([AppDir, "src",  "not_a_real_src_" ++ Name ++ ".erl"])),
 
     rebar_test_utils:run_and_check(Config, [], ["compile"], {ok, [{app, Name}]}),
 

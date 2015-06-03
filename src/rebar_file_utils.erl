@@ -36,10 +36,13 @@
          write_file_if_contents_differ/2,
          system_tmpdir/0,
          system_tmpdir/1,
-         reset_dir/1]).
+         reset_dir/1,
+         touch/1]).
+
 
 -include("rebar.hrl").
 -include_lib("providers/include/providers.hrl").
+ -include_lib("kernel/include/file.hrl").
 
 %% ===================================================================
 %% Public API
@@ -71,7 +74,12 @@ symlink_or_copy(Source, Target) ->
         {error, eexist} ->
             ok;
         {error, _} ->
-            cp_r([Source], Target)
+            Target2 = case is_binary(Target) of
+                          true -> unicode:characters_to_list(Target);
+                          false -> Target
+                      end,
+            rm_rf(Target2),
+            cp_r([Source], Target2)
     end.
 
 %% @doc Remove files and directories.
@@ -121,10 +129,10 @@ mv(Source, Dest) ->
             ok;
         {win32, _} ->
             Res = rebar_utils:sh(
-                        ?FMT("robocopy /move /e \"~s\" \"~s\" 1> nul",
-                             [filename:nativename(Source),
-                              filename:nativename(Dest)]),
-                        [{use_stdout, false}, return_on_error]),
+                    ?FMT("robocopy /move /e \"~s\" \"~s\" 1> nul",
+                         [filename:nativename(Source),
+                          filename:nativename(Dest)]),
+                    [{use_stdout, false}, return_on_error]),
             case Res of
                 {error, {1, []}} ->
                     ok;
@@ -186,6 +194,18 @@ reset_dir(Path) ->
     %% recreate the directory
     filelib:ensure_dir(filename:join([Path, "dummy.beam"])).
 
+%% Linux touch but using erlang functions to work in bot *nix os and
+%% windows
+-spec touch(Path) -> ok | {error, Reason} when
+      Path :: file:name(),
+      Reason :: file:posix().
+touch(Path) ->
+    {ok, A} = file:read_file_info(Path),
+    ok = file:write_file_info(Path, A#file_info{mtime = calendar:local_time(),
+                                                atime = calendar:local_time()}).
+
+
+
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
@@ -198,17 +218,18 @@ delete_each_dir_win32([Dir | Rest]) ->
     delete_each_dir_win32(Rest).
 
 xcopy_win32(Source,Dest)->
-    {ok, R} = rebar_utils:sh(
-                ?FMT("xcopy \"~s\" \"~s\" /q /y /e 2> nul",
-                     [filename:nativename(Source), filename:nativename(Dest)]),
-                [{use_stdout, false}, return_on_error]),
-    case length(R) > 0 of
-        %% when xcopy fails, stdout is empty and and error message is printed
-        %% to stderr (which is redirected to nul)
-        true -> ok;
-        false ->
+    %% "xcopy \"~s\" \"~s\" /q /y /e 2> nul", Chanegd to robocopy to
+    %% handle long names. May have issues with older windows.
+    {_, {Rc, _}} = rebar_utils:sh(
+            ?FMT("robocopy \"~s\" \"~s\" /e /is 2> nul",
+                 [filename:nativename(Source), filename:nativename(Dest)]),
+            [{use_stdout, false}, return_on_error]),
+    case Rc of
+        Rc when Rc < 9; Rc =:= 16 ->
+            ok;
+        _ ->
             {error, lists:flatten(
-                      io_lib:format("Failed to xcopy from ~s to ~s~n",
+                      io_lib:format("Failed to Robocopy ~s to ~s~n",
                                     [Source, Dest]))}
     end.
 
