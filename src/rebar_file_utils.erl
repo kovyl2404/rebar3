@@ -128,13 +128,13 @@ mv(Source, Dest) ->
                                       [{use_stdout, false}, abort_on_error]),
             ok;
         {win32, _} ->
-            {ok, Res} = rebar_utils:sh(
-                        ?FMT("robocopy /move /e \"~s\" \"~s\" 1> nul",
-                             [filename:nativename(Source),
-                              filename:nativename(Dest)]),
-                        [{use_stdout, false}, return_on_error]),
+            Res = rebar_utils:sh(
+                    ?FMT("robocopy /move /e \"~s\" \"~s\" 1> nul",
+                         [filename:nativename(Source),
+                          filename:nativename(Dest)]),
+                    [{use_stdout, false}, return_on_error]),
             case Res of
-                [] ->
+                {error, {1, []}} ->
                     ok;
                 _ ->
                     {error, lists:flatten(
@@ -220,17 +220,16 @@ delete_each_dir_win32([Dir | Rest]) ->
 xcopy_win32(Source,Dest)->
     %% "xcopy \"~s\" \"~s\" /q /y /e 2> nul", Chanegd to robocopy to
     %% handle long names. May have issues with older windows.
-    {ok, R} = rebar_utils:sh(
-                ?FMT("robocopy \"~s\" \"~s\" /e /is 2> nul",
-                     [filename:nativename(Source), filename:nativename(Dest)]),
-                [{use_stdout, false}, return_on_error]),
-    case length(R) > 0 of
-        %% when xcopy fails, stdout is empty and and error message is printed
-        %% to stderr (which is redirected to nul)
-        true -> ok;
-        false ->
+    {_, {Rc, _}} = rebar_utils:sh(
+            ?FMT("robocopy \"~s\" \"~s\" /e /is 2> nul",
+                 [filename:nativename(Source), filename:nativename(Dest)]),
+            [{use_stdout, false}, return_on_error]),
+    case Rc of
+        Rc when Rc < 9; Rc =:= 16 ->
+            ok;
+        _ ->
             {error, lists:flatten(
-                      io_lib:format("Failed to xcopy from ~s to ~s~n",
+                      io_lib:format("Failed to Robocopy ~s to ~s~n",
                                     [Source, Dest]))}
     end.
 
