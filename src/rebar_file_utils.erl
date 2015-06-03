@@ -75,14 +75,18 @@ symlink_or_copy(Source, Target) ->
         {error, eexist} ->
             ok;
         {error, _} ->
-            rm_rf(Target),
+            Target2 = case is_binary(Target) of
+                          true -> unicode:characters_to_list(Target);
+                          false -> Target
+                      end,
+            rm_rf(Target2),
             cp_r([Source], Target)
     end.
 
 %% @doc Remove files and directories.
 %% Target is a single filename, directoryname or wildcard expression.
 -spec rm_rf(string()) -> 'ok'.
-rm_rf(Target) when is_list(Target) ->
+rm_rf(Target) ->
     case os:type() of
         {unix, _} ->
             EscTarget = escape_path(Target),
@@ -96,9 +100,7 @@ rm_rf(Target) when is_list(Target) ->
             ok = delete_each(Files),
             ok = delete_each_dir_win32(Dirs),
             ok
-    end;
-rm_rf(Target) when is_binary(Target) ->
-    rm_rf(binary_to_list(Target)).
+    end.
 
 -spec cp_r(list(string()), file:filename()) -> 'ok'.
 cp_r([], _Dest) ->
@@ -142,7 +144,7 @@ mv(Source, Dest) ->
     end.
 
 win32_robocopy_ok({ok, _}) -> true;
-win32_robocopy_ok({error, {Rc, _}}) when Rc<9, Rc==16 -> true;
+win32_robocopy_ok({error, {Rc, _}}) when Rc<9; Rc=:=16 -> true;
 win32_robocopy_ok(_) -> false.
 
 delete_each([]) ->
@@ -221,18 +223,16 @@ delete_each_dir_win32([Dir | Rest]) ->
 xcopy_win32(Source,Dest)->
     %% "xcopy \"~s\" \"~s\" /q /y /e 2> nul", Chanegd to robocopy to
     %% handle long names. May have issues with older windows.
-    {ok, R} = rebar_utils:sh(
+    Res = rebar_utils:sh(
                 ?FMT("robocopy \"~s\" \"~s\" /e /is 2> nul",
                      [filename:nativename(Source), filename:nativename(Dest)]),
                 [{use_stdout, false}, return_on_error]),
-    case length(R) > 0 of
-        %% when xcopy fails, stdout is empty and and error message is printed
-        %% to stderr (which is redirected to nul)
-        true -> ok;
-        false ->
-            {error, lists:flatten(
-                      io_lib:format("Failed to xcopy from ~s to ~s~n",
-                                    [Source, Dest]))}
+    case win32_robocopy_ok(Res) of
+                true -> ok;
+                false ->
+                    {error, lists:flatten(
+                              io_lib:format("Failed to copy ~s to ~s~n",
+                                            [Source, Dest]))}
     end.
 
 cp_r_win32({true, SourceDir}, {true, DestDir}) ->
