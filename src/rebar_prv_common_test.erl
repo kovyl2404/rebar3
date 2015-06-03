@@ -381,7 +381,9 @@ filter_src_dirs(ErlOpts) ->
 
 test_dirs(State, Opts) ->
     BareTest = filename:join([rebar_state:dir(State), "test"]),
-    F = fun(App) -> rebar_app_info:dir(App) == rebar_state:dir(State) end,
+    F = fun(App) ->
+        rebar_app_info:dir(App) == rebar_state:dir(State)
+    end,
     TestApps = project_apps(State),
     case filelib:is_dir(BareTest) andalso not lists:any(F, TestApps) of
         %% `test` dir at root of project is already scheduled to be
